@@ -1,6 +1,15 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.2.0 (2026-10-21)
+
+First public release.
+
+- `webhook-crash-lab init` writes a commented starter `crash-lab.config.mjs` (never overwrites).
+- `provider: 'github'` signs with `X-Hub-Signature-256`; `signGithub` / `verifyGithub` helpers. `stale-timestamp` is reported as not tested for this scheme.
+- Examples: Express (tested in CI against a real server) and Next.js App Router + Prisma (SQLite).
+- `demo --mode` validates its value.
+
+## 0.1.0 (not published)
 
 - 8 scenarios: single valid, duplicate sequential, duplicate concurrent, out-of-order, invalid signature, missing signature, stale timestamp, malformed JSON.
 - `reset()` / `observe()` / `settle()` state adapters; unconfigured checks reported as "not tested".

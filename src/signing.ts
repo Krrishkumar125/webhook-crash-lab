@@ -42,3 +42,20 @@ export function verifySignature(
     return got.length === expected.length && timingSafeEqual(got, expected);
   });
 }
+
+/** GitHub-style `X-Hub-Signature-256` header: `sha256=<hex hmac-sha256 of the raw body>`. */
+export function signGithub(payload: string, secret: string): string {
+  return `sha256=${createHmac('sha256', secret).update(payload).digest('hex')}`;
+}
+
+/** Constant-time check of an `X-Hub-Signature-256` header. */
+export function verifyGithub(
+  payload: string,
+  header: string | null | undefined,
+  secret: string,
+): boolean {
+  if (!header?.startsWith('sha256=')) return false;
+  const got = Buffer.from(header.slice(7), 'hex');
+  const expected = Buffer.from(signGithub(payload, secret).slice(7), 'hex');
+  return got.length === expected.length && timingSafeEqual(got, expected);
+}

@@ -18,6 +18,7 @@ const HELP = `webhook-crash-lab — crash-test your webhook handler
 
 Usage:
   webhook-crash-lab demo [--mode broken|fixed] [--html file] [--json file]
+  webhook-crash-lab init [file]            Write a starter crash-lab.config.mjs
   webhook-crash-lab run [config] [--html file] [--json file] [--quiet]
 
   config     A .js/.mjs file exporting a config (default: crash-lab.config.mjs)
@@ -27,7 +28,35 @@ Usage:
 
 Exit codes: 0 no failures, 1 failures found, 2 usage or config error.`;
 
-const version = () => (typeof __VERSION__ === 'string' ? __VERSION__ : '0.1.0');
+const STARTER = `// webhook-crash-lab config. Docs: https://github.com/Krrishkumar125/webhook-crash-lab
+import { defineConfig } from 'webhook-crash-lab';
+
+export default defineConfig({
+  // Your running dev server (or import your app and pass (req) => app.fetch(req)).
+  target: 'http://localhost:3000/api/webhooks/stripe',
+  // The signing secret your handler verifies with in this environment.
+  secret: process.env.STRIPE_WEBHOOK_SECRET ?? 'whsec_test_secret',
+  event: {
+    id: 'evt_crashlab_1',
+    type: 'checkout.session.completed',
+    data: { object: { id: 'cs_test_1', metadata: { userId: 'user_1' } } },
+  },
+  // Point these at a TEST database only. reset() runs before every scenario.
+  adapter: {
+    async reset() {
+      // e.g. await prisma.creditLedger.deleteMany();
+    },
+    async observe() {
+      // e.g. return { credits: (await prisma.user.findUnique({ where: { id: 'user_1' } }))?.credits ?? 0 };
+      return {};
+    },
+  },
+  // State after exactly ONE delivery. Keys you leave out are reported as "not tested".
+  expect: { once: {} },
+});
+`;
+
+const version = () => (typeof __VERSION__ === 'string' ? __VERSION__ : '0.2.0');
 
 function write(result: CrashLabResult, html?: string, json?: string) {
   if (html) writeFileSync(html, toHtml(result));
@@ -58,7 +87,19 @@ export async function main(argv: string[], io: Io = console): Promise<number> {
   if (values.version) return (io.log(version()), 0);
   if (values.help || !cmd) return (io.log(HELP), 0);
 
+  if (cmd === 'init') {
+    const path = resolve(file ?? 'crash-lab.config.mjs');
+    if (existsSync(path)) return (io.error(`Refusing to overwrite ${path}`), 2);
+    writeFileSync(path, STARTER);
+    io.log(
+      `Wrote ${path}. Edit target, event and adapter, then: npx webhook-crash-lab run ${file ?? ''}`.trim(),
+    );
+    return 0;
+  }
+
   if (cmd === 'demo') {
+    if (values.mode && values.mode !== 'broken' && values.mode !== 'fixed')
+      return (io.error('--mode must be "broken" or "fixed"'), 2);
     const modes: DemoMode[] = values.mode ? [values.mode as DemoMode] : ['broken', 'fixed'];
     let last: CrashLabResult | undefined;
     for (const mode of modes) {

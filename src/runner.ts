@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { SCENARIOS, type ScenarioDef } from './scenarios.js';
-import { nowSeconds, signPayload } from './signing.js';
+import { nowSeconds, signGithub, signPayload } from './signing.js';
 import type {
   CheckResult,
   CrashLabConfig,
@@ -15,9 +15,11 @@ type SignMode = 'valid' | 'invalid' | 'missing' | 'stale';
 
 async function deliver(config: CrashLabConfig, body: string, mode: SignMode): Promise<number> {
   const headers = new Headers({ 'content-type': 'application/json' });
-  const header = config.signatureHeader ?? 'stripe-signature';
-  if (mode === 'valid') headers.set(header, signPayload(body, config.secret));
-  if (mode === 'invalid') headers.set(header, signPayload(body, `${config.secret}_wrong`));
+  const github = config.provider === 'github';
+  const header = config.signatureHeader ?? (github ? 'x-hub-signature-256' : 'stripe-signature');
+  const sign = (secret: string) => (github ? signGithub(body, secret) : signPayload(body, secret));
+  if (mode === 'valid') headers.set(header, sign(config.secret));
+  if (mode === 'invalid') headers.set(header, sign(`${config.secret}_wrong`));
   if (mode === 'stale')
     headers.set(
       header,
@@ -92,6 +94,25 @@ async function runScenario(def: ScenarioDef, config: CrashLabConfig): Promise<Sc
   let codes: number[] = [];
   let state: CheckResult;
 
+  if (def.id === 'stale-timestamp' && config.provider === 'github') {
+    return finish(
+      def,
+      started,
+      [],
+      [
+        {
+          name: 'http status',
+          status: 'not-tested',
+          detail: 'GitHub signatures carry no timestamp.',
+        },
+        {
+          name: 'business state',
+          status: 'not-tested',
+          detail: 'Not applicable to the github scheme.',
+        },
+      ],
+    );
+  }
   if (def.expectation === 'sequence' && !config.sequence) {
     return finish(
       def,

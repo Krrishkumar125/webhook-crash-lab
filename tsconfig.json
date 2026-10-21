@@ -13,7 +13,8 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "declaration": true,
-    "types": ["node"]
+    "types": ["node"],
+    "paths": { "webhook-crash-lab": ["./src/index.ts"] }
   },
   "include": ["src", "test", "examples", "*.config.ts"]
 }

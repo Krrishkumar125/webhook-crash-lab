@@ -61,3 +61,19 @@ describe('cli', () => {
     expect(await main(['frobnicate'], io().io)).toBe(2);
   });
 });
+
+describe('cli init', () => {
+  it('writes a starter config once and refuses to overwrite', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wcl-init-'));
+    const file = join(dir, 'crash-lab.config.mjs');
+    expect(await main(['init', file], io().io)).toBe(0);
+    const text = readFileSync(file, 'utf8');
+    expect(text).toMatch(/export default defineConfig/);
+    expect(text).toMatch(/expect:/);
+    expect(await main(['init', file], io().io)).toBe(2);
+  });
+
+  it('demo --mode rejects unknown modes', async () => {
+    expect(await main(['demo', '--mode', 'nope'], io().io)).toBe(2);
+  });
+});

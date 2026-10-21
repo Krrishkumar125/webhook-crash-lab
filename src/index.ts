@@ -3,7 +3,13 @@ import type { CrashLabResult } from './types.js';
 
 export { runCrashLab } from './runner.js';
 export { SCENARIOS } from './scenarios.js';
-export { signPayload, verifySignature, type VerifyOptions } from './signing.js';
+export {
+  signGithub,
+  signPayload,
+  verifyGithub,
+  verifySignature,
+  type VerifyOptions,
+} from './signing.js';
 export { toText, toJson } from './report/text.js';
 export { toHtml } from './report/html.js';
 export {

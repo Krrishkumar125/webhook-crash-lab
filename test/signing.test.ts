@@ -40,3 +40,16 @@ describe('verifySignature', () => {
     expect(verifySignature(payload, old, secret, { toleranceSeconds: 0 })).toBe(true);
   });
 });
+
+describe('github scheme', () => {
+  it('signs x-hub-signature-256 as sha256=<hex hmac of body>', async () => {
+    const { signGithub, verifyGithub } = await import('../src/index.js');
+    const { createHmac } = await import('node:crypto');
+    const h = signGithub(payload, secret);
+    expect(h).toBe(`sha256=${createHmac('sha256', secret).update(payload).digest('hex')}`);
+    expect(verifyGithub(payload, h, secret)).toBe(true);
+    expect(verifyGithub(payload, h, 'x')).toBe(false);
+    expect(verifyGithub(payload, null, secret)).toBe(false);
+    expect(verifyGithub(payload, 'sha256=zz', secret)).toBe(false);
+  });
+});

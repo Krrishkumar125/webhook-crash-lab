@@ -88,6 +88,15 @@ it('stripe webhook survives duplicate, concurrent and out-of-order delivery', as
 
 Signatures use Stripe's `t=...,v1=...` HMAC-SHA256 scheme and are verified against the official `stripe` library in this repo's tests.
 
+## Examples
+
+- [Express](examples/express/app.ts): raw body, signature check, atomic claim. Tested in CI against a real server.
+- [Next.js App Router + Prisma](examples/nextjs-prisma/README.md): pass the route's `POST` straight in, unique `eventId` as the claim.
+
+## GitHub webhooks
+
+Set `provider: 'github'` to sign with `X-Hub-Signature-256: sha256=...`. GitHub signatures have no timestamp, so `stale-timestamp` is reported as not tested.
+
 ## BullMQ: one webhook, one job
 
 ```ts
@@ -104,6 +113,7 @@ expect: { once: { credits: 100, receiptJobs: 1 } },
 ## CLI and CI
 
 ```bash
+npx webhook-crash-lab init          # writes a commented crash-lab.config.mjs
 npx webhook-crash-lab run crash-lab.config.mjs --html crash-report.html --json crash-report.json
 ```
 
