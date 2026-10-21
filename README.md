@@ -1,0 +1,122 @@
+# webhook-crash-lab
+
+**HTTP 200 does not mean your webhook is correct.**
+
+`webhook-crash-lab` crash-tests a Stripe-style webhook handler on your machine or in CI. It replays the deliveries that break real apps (duplicates, parallel retries, out-of-order events, forged, unsigned, stale and malformed requests) and then checks your **business state**: credits granted once, one ledger row, one BullMQ job.
+
+[![CI](https://github.com/Krrishkumar125/webhook-crash-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/Krrishkumar125/webhook-crash-lab/actions/workflows/ci.yml)
+MIT · TypeScript · zero runtime dependencies · Node 20+
+
+## 60-second demo
+
+```bash
+npx webhook-crash-lab demo --html report.html
+```
+
+This runs a bundled "AI credits" app twice: first the kind of handler AI tools often generate, then the fixed version.
+
+```
+=== BROKEN handler (typical AI-generated code) ===
+  PASS  single-valid           One valid delivery
+  PASS  duplicate-sequential   Same event delivered again (retry)
+  FAIL  duplicate-concurrent   Same event delivered in parallel
+        business state: credits: expected 100, got 500; ledgerEntries: expected 1, got 5; jobs: expected 1, got 5.
+        Fix: Claim the event id atomically (INSERT ... ON CONFLICT DO NOTHING, Redis SET NX, BullMQ jobId = event.id) ...
+  FAIL  out-of-order           Related events arrive out of order
+  PASS  invalid-signature      Forged signature
+  FAIL  missing-signature      No signature header        -> crashed with 500
+  FAIL  stale-timestamp        Old, replayed delivery     -> accepted, granted credits
+  FAIL  malformed-json         Broken JSON body           -> crashed with 500
+  3 passed, 5 failed, 0 not tested
+
+=== FIXED handler ===
+  8 passed, 0 failed, 0 not tested
+```
+
+Open `report.html` for a plain-English version you can share with a non-technical cofounder. The demo source is in [`src/demo/app.ts`](src/demo/app.ts).
+
+## Use it in your tests (Vitest / Jest)
+
+```ts
+import { runCrashLab, assertNoCrashes } from 'webhook-crash-lab';
+import { app } from '../src/app'; // Hono, or any (req: Request) => Response handler
+import { db } from '../src/db';
+
+it('stripe webhook survives duplicate, concurrent and out-of-order delivery', async () => {
+  const result = await runCrashLab({
+    target: (req) => app.fetch(req), // or a URL: 'http://localhost:3000/webhooks/stripe'
+    secret: 'whsec_test_secret', // the secret your handler verifies with in tests
+    event: {
+      id: 'evt_1',
+      type: 'checkout.session.completed',
+      data: { object: { id: 'cs_1', metadata: { userId: 'u1' } } },
+    },
+    adapter: {
+      reset: () => db.truncateAll(),
+      observe: async () => ({
+        credits: await db.credits('u1'),
+        ledgerEntries: await db.ledger.count(),
+      }),
+    },
+    expect: { once: { credits: 100, ledgerEntries: 1 } },
+    sequence: {
+      events: [
+        ,/* checkout.session.completed */
+        /* charge.refunded */
+      ],
+      expected: { credits: 0 },
+    },
+  });
+  assertNoCrashes(result); // throws a readable report listing what failed and how to fix it
+});
+```
+
+## Scenarios
+
+| id                     | sends                           | passes when                                |
+| ---------------------- | ------------------------------- | ------------------------------------------ |
+| `single-valid`         | the event once                  | 2xx, state equals `expect.once`            |
+| `duplicate-sequential` | the same event 3× in a row      | 2xx each, state still equals `expect.once` |
+| `duplicate-concurrent` | 5 identical copies in parallel  | 2xx each, state still equals `expect.once` |
+| `out-of-order`         | your `sequence` reversed        | no 5xx, state equals `sequence.expected`   |
+| `invalid-signature`    | signed with the wrong secret    | 4xx, state unchanged                       |
+| `missing-signature`    | no signature header             | 4xx (not 500), state unchanged             |
+| `stale-timestamp`      | valid signature, 10 minutes old | 4xx, state unchanged                       |
+| `malformed-json`       | valid signature, truncated body | 4xx (not 500), state unchanged             |
+
+**Nothing is silently passed.** If you don't give an adapter, `expect.once` or `sequence`, those checks are reported as **not tested**.
+
+Signatures use Stripe's `t=...,v1=...` HMAC-SHA256 scheme and are verified against the official `stripe` library in this repo's tests.
+
+## BullMQ: one webhook, one job
+
+```ts
+import { Queue } from 'bullmq';
+import { bullmqAdapter, combineAdapters } from 'webhook-crash-lab/bullmq';
+
+const receipts = new Queue('receipts-test', { connection });
+adapter: combineAdapters(dbAdapter, bullmqAdapter({ queue: receipts, key: 'receiptJobs' })),
+expect: { once: { credits: 100, receiptJobs: 1 } },
+```
+
+`reset()` obliterates the queue, so point it at a test queue only. The usual fix is `queue.add(name, data, { jobId: event.id })`. Starting a new service? [create-bullmq-app](https://github.com/Krrishkumar125/create-bullmq-app) scaffolds idempotent producers out of the box.
+
+## CLI and CI
+
+```bash
+npx webhook-crash-lab run crash-lab.config.mjs --html crash-report.html --json crash-report.json
+```
+
+The config file default-exports the same object `runCrashLab` takes. Exit codes: `0` no failures, `1` failures found, `2` config or usage error.
+
+## What it does not do
+
+It does not certify payment security, simulate Stripe's billing engine, touch live data or make charges, or fix your code. It tests the invariants you declare. Run it against test databases and test queues only.
+
+## Prior art
+
+[Hookproof](https://hookproof.dev) runs a similar set of adversarial checks as a hosted service. Stripe CLI (`stripe trigger`) generates real events, and Hookdeck handles production delivery and replay. webhook-crash-lab is the open-source, in-your-test-suite option with adapters that read your own DB and queues.
+
+## License
+
+MIT © Krrish Kumar

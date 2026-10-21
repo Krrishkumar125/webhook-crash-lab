@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22, 24]
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
+    env:
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:coverage
+      - run: npm run build
+      - run: npm run check:exports
+      - name: Run the packed CLI the way users do
+        run: |
+          T=$(npm pack -s --pack-destination "$RUNNER_TEMP")
+          mkdir "$RUNNER_TEMP/u" && cd "$RUNNER_TEMP/u" && npm init -y >/dev/null
+          npm i "$RUNNER_TEMP/$T"
+          npx webhook-crash-lab --version
+          npx webhook-crash-lab demo --html report.html
+          test -s report.html
+          if npx webhook-crash-lab demo --mode broken; then echo "broken demo should exit 1"; exit 1; fi
