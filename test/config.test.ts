@@ -6,7 +6,12 @@ import { describe, expect, it } from 'vitest';
 import { main } from '../src/cli.js';
 import { findConfig, loadConfig } from '../src/config.js';
 
-const src = pathToFileURL(join(process.cwd(), 'src/index.ts')).href;
+import * as lab from '../src/index.js';
+
+// Configs read the library from a global instead of importing src/ through jiti, so the code
+// under test is the instance vitest instruments (a second jiti-loaded copy breaks coverage).
+(globalThis as { __lab?: unknown }).__lab = lab;
+const LAB = '(globalThis as any).__lab';
 const quiet = { log: () => {}, error: () => {} };
 
 describe('loadConfig', () => {
@@ -15,7 +20,8 @@ describe('loadConfig', () => {
     const file = join(dir, 'crash-lab.config.ts');
     writeFileSync(
       file,
-      `import { demoConfig, type CrashLabConfig } from '${src}';
+      `import type { CrashLabConfig } from '${pathToFileURL(join(process.cwd(), 'src/index.ts')).href}';
+       const { demoConfig } = ${LAB};
        interface Extra { note: string }
        const extra: Extra = { note: 'typed' };
        export default { ...demoConfig('fixed'), name: extra.note } satisfies CrashLabConfig;\n`,
@@ -29,12 +35,12 @@ describe('loadConfig', () => {
     const dir = mkdtempSync(join(tmpdir(), 'wcl-ts-'));
     writeFileSync(
       join(dir, 'a.mts'),
-      `import { demoConfig } from '${src}';\nexport default demoConfig('broken');\n`,
+      `const { demoConfig } = ${LAB};\nexport default demoConfig('broken');\n`,
     );
     expect((await loadConfig(join(dir, 'a.mts'))).name).toMatch(/broken/);
     writeFileSync(
       join(dir, 'b.cts'),
-      `const lab = require(${JSON.stringify(join(process.cwd(), 'src/index.ts'))});\nmodule.exports = lab.demoConfig('fixed');\n`,
+      `const lab = (globalThis as any).__lab;\nmodule.exports = lab.demoConfig('fixed');\n`,
     );
     expect((await loadConfig(join(dir, 'b.cts'))).name).toMatch(/fixed/);
   });
@@ -45,7 +51,7 @@ describe('loadConfig', () => {
     const write = (name: string) =>
       writeFileSync(
         file,
-        `import { demoConfig } from '${src}';\nexport default { ...demoConfig('fixed'), name: '${name}' };\n`,
+        `const { demoConfig } = ${LAB};\nexport default { ...demoConfig('fixed'), name: '${name}' };\n`,
       );
     write('one');
     expect((await loadConfig(file)).name).toBe('one');
@@ -61,7 +67,10 @@ describe('loadConfig', () => {
     const { readFileSync } = await import('node:fs');
     writeFileSync(
       file,
-      readFileSync(file, 'utf8').replace("from 'webhook-crash-lab'", `from '${src}'`),
+      readFileSync(file, 'utf8').replace(
+        /import \{([^}]*)\} from 'webhook-crash-lab';/,
+        (_m, names: string) => `const {${names.replace(/\btype\s+\w+,?/g, '')}} = ${LAB};`,
+      ),
     );
     const config = await loadConfig(file);
     expect(config.event.type).toBe('checkout.session.completed');
@@ -75,23 +84,20 @@ describe('loadConfig', () => {
       const file = join(dir, 'n.config.ts');
       writeFileSync(
         file,
-        `import { demoConfig } from '${src}';\nconst c: { name: string } = { name: 'native' };\nexport default { ...demoConfig('fixed'), ...c };\n`,
+        `const { demoConfig } = ${LAB};\nconst c: { name: string } = { name: 'native' };\nexport default { ...demoConfig('fixed'), ...c };\n`,
       );
       expect((await loadConfig(file, undefined, { typescript: 'native' })).name).toBe('native');
     },
   );
 
-  it.skipIf(native)(
-    'explains how to load .ts configs when type stripping is unavailable',
-    async () => {
-      const dir = mkdtempSync(join(tmpdir(), 'wcl-native-'));
-      const file = join(dir, 'n.config.ts');
-      writeFileSync(file, 'const x: number = 1;\nexport default x;\n');
-      await expect(loadConfig(file, undefined, { typescript: 'native' })).rejects.toThrow(
-        /npm i -D jiti/,
-      );
-    },
-  );
+  it('explains how to load .ts configs when the file cannot be imported', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wcl-native-'));
+    const file = join(dir, 'n.config.ts');
+    writeFileSync(file, 'export default {\n');
+    await expect(loadConfig(file, undefined, { typescript: 'native' })).rejects.toThrow(
+      /npm i -D jiti/,
+    );
+  });
 
   it('gives clear errors', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'wcl-ts-'));
