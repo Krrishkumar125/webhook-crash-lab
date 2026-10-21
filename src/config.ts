@@ -29,7 +29,9 @@ async function importTs(path: string, prefer: 'auto' | 'native'): Promise<unknow
       // optional peer dependency not installed: fall back to Node's own type stripping
     }
     if (jiti) {
-      return jiti.createJiti(import.meta.url, { moduleCache: false, fsCache: false }).import(path);
+      return jiti
+        .createJiti(pathToFileURL(path).href, { moduleCache: false, fsCache: false })
+        .import(path);
     }
   }
   try {
