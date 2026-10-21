@@ -7,7 +7,7 @@ import { createDemoApp, runCrashLab } from '../src/index.js';
 const url = process.env.REDIS_URL ?? 'redis://127.0.0.1:6379';
 const connection = new Redis(url, { maxRetriesPerRequest: null });
 
-describe('BullMQ adapter (real Redis)', () => {
+describe.skipIf(!!process.env.SKIP_REDIS_TESTS)('BullMQ adapter (real Redis)', () => {
   const queues: Queue[] = [];
   afterAll(async () => {
     for (const q of queues) {

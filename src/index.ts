@@ -31,3 +31,4 @@ export function assertNoCrashes(result: CrashLabResult): void {
 
 /** Identity helper for typed config files: `export default defineConfig({...})`. */
 export const defineConfig = <T extends import('./types.js').CrashLabConfig>(c: T): T => c;
+export { CONFIG_FILES, findConfig, loadConfig } from './config.js';

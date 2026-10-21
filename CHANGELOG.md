@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 (2026-10-22)
+
+- TypeScript configs: `crash-lab.config.ts` / `.mts` / `.cts` load through jiti when installed (optional peer
+  dependency), otherwise Node's built-in type stripping, with a clear error explaining both (#2).
+- `run` without a path finds `crash-lab.config.{mjs,js,ts,mts,cjs,cts}`. `init <file>.ts` writes a TypeScript starter.
+- New exports: `loadConfig`, `findConfig`, `CONFIG_FILES`. Configs are re-read on every load, so edits are picked up.
+- CI adds a Windows job.
+
 ## 0.2.0 (2026-10-21)
 
 First public release.

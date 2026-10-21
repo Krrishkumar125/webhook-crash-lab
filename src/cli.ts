@@ -1,7 +1,7 @@
 import { existsSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
+import { CONFIG_FILES, findConfig, loadConfig } from './config.js';
 import { demoConfig, type DemoMode } from './demo/app.js';
 import { toHtml } from './report/html.js';
 import { toJson, toText } from './report/text.js';
@@ -21,7 +21,7 @@ Usage:
   webhook-crash-lab init [file]            Write a starter crash-lab.config.mjs
   webhook-crash-lab run [config] [--html file] [--json file] [--quiet]
 
-  config     A .js/.mjs file exporting a config (default: crash-lab.config.mjs)
+  config     A .mjs/.js/.ts/.mts/.cjs/.cts file exporting a config (default: crash-lab.config.*)
   --html     Write a plain-English HTML report
   --json     Write a JSON report
   --quiet    Only print the summary line
@@ -114,16 +114,17 @@ export async function main(argv: string[], io: Io = console): Promise<number> {
   }
 
   if (cmd === 'run') {
-    const path = resolve(file ?? 'crash-lab.config.mjs');
-    if (!existsSync(path)) return (io.error(`Config not found: ${path}`), 2);
+    const path = file ? resolve(file) : findConfig();
+    if (!path)
+      return (
+        io.error(`Config not found: none of ${CONFIG_FILES.join(', ')} in ${process.cwd()}`),
+        2
+      );
     let config: CrashLabConfig;
     try {
-      const mod = (await import(pathToFileURL(path).href)) as { default?: CrashLabConfig };
-      config = mod.default as CrashLabConfig;
-      if (!config || !config.target || typeof config.secret !== 'string' || !config.event?.id)
-        throw new Error('config must export default { target, secret, event }');
+      config = await loadConfig(path);
     } catch (e) {
-      io.error(`Invalid config ${path}: ${(e as Error).message}`);
+      io.error((e as Error).message);
       return 2;
     }
     const result = await runCrashLab(config);

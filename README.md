@@ -113,11 +113,16 @@ expect: { once: { credits: 100, receiptJobs: 1 } },
 ## CLI and CI
 
 ```bash
-npx webhook-crash-lab init          # writes a commented crash-lab.config.mjs
-npx webhook-crash-lab run crash-lab.config.mjs --html crash-report.html --json crash-report.json
+npx webhook-crash-lab init                     # writes a commented crash-lab.config.mjs
+npx webhook-crash-lab init crash-lab.config.ts  # or a TypeScript one
+npx webhook-crash-lab run --html crash-report.html --json crash-report.json
 ```
 
-The config file default-exports the same object `runCrashLab` takes. Exit codes: `0` no failures, `1` failures found, `2` config or usage error.
+`run` without a path picks the first of `crash-lab.config.{mjs,js,ts,mts,cjs,cts}`. The config file default-exports the
+same object `runCrashLab` takes. **TypeScript configs** load through [jiti](https://github.com/unjs/jiti) when it is
+installed (`npm i -D jiti`; handles extensionless imports of your app), otherwise through Node's built-in type
+stripping (Node 22.18+). `loadConfig(path)` is exported for tools that want the same behaviour. Works with `npx`,
+`pnpm dlx` and `bunx`. Exit codes: `0` no failures, `1` failures found, `2` config or usage error.
 
 ## What it does not do
 

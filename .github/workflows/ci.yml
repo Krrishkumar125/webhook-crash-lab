@@ -44,3 +44,17 @@ jobs:
           npx webhook-crash-lab demo --html report.html
           test -s report.html
           if npx webhook-crash-lab demo --mode broken; then echo "broken demo should exit 1"; exit 1; fi
+  windows:
+    runs-on: windows-latest
+    env:
+      SKIP_REDIS_TESTS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run
+      - run: npm run build
+      - run: node dist/cli.js demo --mode fixed
