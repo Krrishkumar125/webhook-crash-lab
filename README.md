@@ -123,6 +123,12 @@ The config file default-exports the same object `runCrashLab` takes. Exit codes:
 
 It does not certify payment security, simulate Stripe's billing engine, touch live data or make charges, or fix your code. It tests the invariants you declare. Run it against test databases and test queues only.
 
+## Companion tools
+
+- [eslint-plugin-webhook-safety](https://github.com/Krrishkumar125/eslint-plugin-webhook-safety) finds the same bugs statically: JSON body parsed before the Stripe signature check, missing verification, no `event.id` dedupe, and BullMQ jobs without `jobId`.
+- [eslint-plugin-bullmq](https://github.com/Krrishkumar125/eslint-plugin-bullmq) covers BullMQ production pitfalls: missing error listeners, `maxRetriesPerRequest`, invalid job ids, and dedupe broken by `removeOnComplete`.
+- [webhook-crash-lab-mcp](https://github.com/Krrishkumar125/webhook-crash-lab-mcp) is an MCP server, Claude Code plugin and Codex skill. It lets coding agents run crash-lab, fix the handler, and re-run until it passes.
+
 ## Prior art
 
 [Hookproof](https://hookproof.dev) runs a similar set of adversarial checks as a hosted service. Stripe CLI (`stripe trigger`) generates real events, and Hookdeck handles production delivery and replay. webhook-crash-lab is the open-source, in-your-test-suite option with adapters that read your own DB and queues.
