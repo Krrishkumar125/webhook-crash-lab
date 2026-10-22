@@ -1,7 +1,7 @@
 {
   "name": "webhook-crash-lab",
   "version": "0.3.1",
-  "description": "Crash-test your Stripe-style webhook handler: replay duplicate, concurrent, out-of-order, unsigned and stale deliveries, then assert business state (credits granted once, one ledger row, one BullMQ job).",
+  "description": "Crash-test Stripe-style webhook handlers with duplicate, concurrent, out-of-order and forged deliveries.",
   "license": "MIT",
   "author": "Krrish Kumar (https://github.com/Krrishkumar125)",
   "repository": {
@@ -9,7 +9,9 @@
     "url": "git+https://github.com/Krrishkumar125/webhook-crash-lab.git"
   },
   "homepage": "https://github.com/Krrishkumar125/webhook-crash-lab#readme",
-  "bugs": "https://github.com/Krrishkumar125/webhook-crash-lab/issues",
+  "bugs": {
+    "url": "https://github.com/Krrishkumar125/webhook-crash-lab/issues"
+  },
   "keywords": [
     "webhook",
     "stripe",
@@ -17,12 +19,10 @@
     "testing",
     "vitest",
     "jest",
-    "bullmq",
-    "redis",
-    "duplicate",
+    "duplicate-events",
     "race-condition",
-    "ci",
-    "payments"
+    "payments",
+    "bullmq"
   ],
   "type": "module",
   "sideEffects": false,
