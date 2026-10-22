@@ -1,6 +1,6 @@
 {
   "name": "webhook-crash-lab",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Crash-test Stripe-style webhook handlers with duplicate, concurrent, out-of-order and forged deliveries.",
   "license": "MIT",
   "author": "Krrish Kumar (https://github.com/Krrishkumar125)",

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.2 (2026-10-23)
+
+- npm metadata: shorter description, focused keywords, homepage/bugs links; README links sibling packages.
+
 ## 0.3.0 (2026-10-22)
 
 - TypeScript configs: `crash-lab.config.ts` / `.mts` / `.cts` load through jiti when installed (optional peer
