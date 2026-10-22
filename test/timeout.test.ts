@@ -20,9 +20,9 @@ describe('delivery timeout', () => {
       timeoutMs: 50,
     });
     expect(Date.now() - t0).toBeLessThan(2000);
-    const s = r.scenarios[0]!;
-    expect(s.status).toBe('fail');
-    expect(s.checks[0]?.detail).toMatch(/did not respond within 50ms/);
+    const s = r.scenarios[0];
+    expect(s?.status).toBe('fail');
+    expect(s?.checks[0]?.detail).toMatch(/did not respond within 50ms/);
     expect(aborted).toBe(true);
   });
 
