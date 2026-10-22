@@ -86,6 +86,8 @@ it('stripe webhook survives duplicate, concurrent and out-of-order delivery', as
 
 **Nothing is silently passed.** If you don't give an adapter, `expect.once` or `sequence`, those checks are reported as **not tested**.
 
+**Every delivery has a deadline.** A handler that doesn't respond within `timeoutMs` (default 10000) fails the scenario instead of hanging the run, and the request's `signal` is aborted so your handler can stop work.
+
 Signatures use Stripe's `t=...,v1=...` HMAC-SHA256 scheme and are verified against the official `stripe` library in this repo's tests.
 
 ## Examples

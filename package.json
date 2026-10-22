@@ -1,6 +1,6 @@
 {
   "name": "webhook-crash-lab",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Crash-test your Stripe-style webhook handler: replay duplicate, concurrent, out-of-order, unsigned and stale deliveries, then assert business state (credits granted once, one ledger row, one BullMQ job).",
   "license": "MIT",
   "author": "Krrish Kumar (https://github.com/Krrishkumar125)",

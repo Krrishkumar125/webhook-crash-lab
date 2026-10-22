@@ -26,16 +26,36 @@ async function deliver(config: CrashLabConfig, body: string, mode: SignMode): Pr
       signPayload(body, config.secret, nowSeconds() - (config.staleSeconds ?? 600)),
     );
   const url = typeof config.target === 'string' ? config.target : 'http://crash-lab.local/webhook';
-  const req = new Request(url, { method: 'POST', headers, body });
+  const controller = new AbortController();
+  const req = new Request(url, { method: 'POST', headers, body, signal: controller.signal });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<typeof TIMED_OUT>((resolve) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      resolve(TIMED_OUT);
+    }, timeoutOf(config));
+  });
+  const attempt = (async () => {
+    try {
+      const res = typeof config.target === 'string' ? await fetch(req) : await config.target(req);
+      await res.arrayBuffer().catch(() => undefined);
+      return res.status;
+    } catch {
+      // A thrown handler is what a framework would turn into a 500; an unreachable URL is 0.
+      return typeof config.target === 'string' ? 0 : 500;
+    }
+  })();
   try {
-    const res = typeof config.target === 'string' ? await fetch(req) : await config.target(req);
-    await res.arrayBuffer().catch(() => undefined);
-    return res.status;
-  } catch {
-    // A thrown handler is what a framework would turn into a 500; an unreachable URL is 0.
-    return typeof config.target === 'string' ? 0 : 500;
+    return await Promise.race([attempt, timedOut]);
+  } finally {
+    clearTimeout(timer);
   }
 }
+
+/** Status code used internally for a delivery that got no response within `timeoutMs`. */
+const TIMED_OUT = -1;
+const DEFAULT_TIMEOUT_MS = 10_000;
+const timeoutOf = (config: CrashLabConfig) => config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
 const pick = (state: State, keys: string[]): State =>
   Object.fromEntries(keys.map((k) => [k, state[k]]));
@@ -47,8 +67,15 @@ function diff(expected: State, actual: State): string {
     .join('; ');
 }
 
-function statusCheck(def: ScenarioDef, codes: number[]): CheckResult {
+function statusCheck(def: ScenarioDef, codes: number[], timeoutMs: number): CheckResult {
   const name = 'http status';
+  const timeouts = codes.filter((c) => c === TIMED_OUT).length;
+  if (timeouts)
+    return {
+      name,
+      status: 'fail',
+      detail: `Handler did not respond within ${timeoutMs}ms (${timeouts}/${codes.length} requests). Providers treat a slow response as a failed delivery and retry it, so acknowledge quickly and do slow work in a queue.`,
+    };
   if (codes.includes(0))
     return { name, status: 'fail', detail: 'Could not reach the target URL (connection failed).' };
   const crashed = codes.filter((c) => c >= 500);
@@ -185,7 +212,7 @@ async function runScenario(def: ScenarioDef, config: CrashLabConfig): Promise<Sc
       ? { name, status: 'fail', detail: `A rejected delivery still changed state: ${d}.` }
       : { name, status: 'pass', detail: 'State unchanged.' };
   }
-  return finish(def, started, codes, [statusCheck(def, codes), state]);
+  return finish(def, started, codes, [statusCheck(def, codes, timeoutOf(config)), state]);
 }
 
 function finish(
@@ -215,6 +242,11 @@ function finish(
 
 /** Run every (or the selected) crash scenario against your handler, one at a time. */
 export async function runCrashLab(config: CrashLabConfig): Promise<CrashLabResult> {
+  if (
+    config.timeoutMs !== undefined &&
+    !(Number.isFinite(config.timeoutMs) && config.timeoutMs > 0)
+  )
+    throw new Error(`timeoutMs must be a positive number of milliseconds, got ${config.timeoutMs}`);
   const startedAt = new Date().toISOString();
   const defs = SCENARIOS.filter((s) => !config.scenarios || config.scenarios.includes(s.id));
   const scenarios: ScenarioResult[] = [];

@@ -58,6 +58,11 @@ export interface CrashLabConfig {
   signatureHeader?: string;
   /** Age of the stale delivery in seconds. Default 600 (Stripe tolerance is 300). */
   staleSeconds?: number;
+  /**
+   * Per-delivery deadline in milliseconds. A delivery with no response by then fails the scenario,
+   * and the request's `signal` is aborted. Default 10000.
+   */
+  timeoutMs?: number;
 }
 
 export type Status = 'pass' | 'fail' | 'not-tested';
