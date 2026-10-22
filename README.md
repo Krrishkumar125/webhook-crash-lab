@@ -5,6 +5,8 @@
 `webhook-crash-lab` crash-tests a Stripe-style webhook handler on your machine or in CI. It replays the deliveries that break real apps (duplicates, parallel retries, out-of-order events, forged, unsigned, stale and malformed requests) and then checks your **business state**: credits granted once, one ledger row, one BullMQ job.
 
 [![CI](https://github.com/Krrishkumar125/webhook-crash-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/Krrishkumar125/webhook-crash-lab/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/webhook-crash-lab)](https://www.npmjs.com/package/webhook-crash-lab)
+[![downloads](https://img.shields.io/npm/dm/webhook-crash-lab)](https://www.npmjs.com/package/webhook-crash-lab)
 MIT · TypeScript · zero runtime dependencies · Node 20+
 
 ## 60-second demo
