@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.3 (2026-10-25)
+
+- README: npm weekly downloads badge (docs only, no code changes).
+
 ## 0.3.2 (2026-10-23)
 
 - npm metadata: shorter description, focused keywords, homepage/bugs links; README links sibling packages.
