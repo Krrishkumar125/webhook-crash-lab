@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.4 (2026-11-15)
+
+- `demo`: the broken run header now reads `=== BROKEN handler ===`, so the terminal output matches the README.
+
 ## 0.3.3 (2026-10-25)
 
 - README: npm weekly downloads badge (docs only, no code changes).

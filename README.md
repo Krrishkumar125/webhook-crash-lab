@@ -20,7 +20,7 @@ npx webhook-crash-lab demo --html report.html
 This runs a bundled "AI credits" app twice: first the kind of handler AI tools often generate, then the fixed version.
 
 ```
-=== BROKEN handler (typical AI-generated code) ===
+=== BROKEN handler ===
   PASS  single-valid           One valid delivery
   PASS  duplicate-sequential   Same event delivered again (retry)
   FAIL  duplicate-concurrent   Same event delivered in parallel

@@ -30,6 +30,8 @@ describe('cli', () => {
     const out = a.out.join('\n');
     expect(out).toMatch(/broken/i);
     expect(out).toMatch(/fixed/i);
+    expect(out).toContain('=== BROKEN handler ===');
+    expect(out).not.toMatch(/AI-generated/i);
     expect(readFileSync(join(dir, 'r.html'), 'utf8')).toContain('<!doctype html>');
     expect(JSON.parse(readFileSync(join(dir, 'r.json'), 'utf8')).ok).toBe(true);
   });

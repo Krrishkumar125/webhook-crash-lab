@@ -104,9 +104,7 @@ export async function main(argv: string[], io: Io = console): Promise<number> {
     let last: CrashLabResult | undefined;
     for (const mode of modes) {
       last = await runCrashLab(demoConfig(mode));
-      io.log(
-        `\n=== ${mode === 'broken' ? 'BROKEN handler (typical AI-generated code)' : 'FIXED handler'} ===`,
-      );
+      io.log(`\n=== ${mode === 'broken' ? 'BROKEN handler' : 'FIXED handler'} ===`);
       io.log(toText(last));
     }
     write(last as CrashLabResult, values.html, values.json);
