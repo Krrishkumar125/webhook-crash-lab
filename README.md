@@ -15,6 +15,8 @@ MIT · TypeScript · zero runtime dependencies · Node 20+
 npx webhook-crash-lab demo --html report.html
 ```
 
+![Terminal run of npx webhook-crash-lab demo: the broken handler fails 5 of 8 checks, then the fixed handler passes all 8](docs/demo.gif)
+
 This runs a bundled "AI credits" app twice: first the kind of handler AI tools often generate, then the fixed version.
 
 ```
