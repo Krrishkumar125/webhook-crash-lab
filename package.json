@@ -87,6 +87,7 @@
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
     "@eslint/js": "^10.0.1",
+    "@hono/node-server": "^2.1.11",
     "@types/express": "^5.0.6",
     "@types/node": "^20.19.43",
     "@vitest/coverage-v8": "^4.1.12",
@@ -94,6 +95,7 @@
     "eslint": "^10.13.0",
     "express": "^5.3.0",
     "globals": "^17.13.0",
+    "hono": "^4.13.21",
     "ioredis": "^6.0.0",
     "prettier": "^3.9.10",
     "publint": "^0.3.25",

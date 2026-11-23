@@ -97,6 +97,7 @@ Signatures use Stripe's `t=...,v1=...` HMAC-SHA256 scheme and are verified again
 ## Examples
 
 - [Express](examples/express/app.ts): raw body, signature check, atomic claim. Tested in CI against a real server.
+- [Hono](examples/hono/README.md): raw body from `c.req.text()`, signature check, atomic claim. Config checks business state through an HTTP adapter. Tested in CI against a real server.
 - [Next.js App Router + Prisma](examples/nextjs-prisma/README.md): pass the route's `POST` straight in, unique `eventId` as the claim.
 
 ## GitHub webhooks
