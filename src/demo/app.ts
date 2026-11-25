@@ -26,11 +26,16 @@ export function createDemoApp({ mode, secret, enqueue }: DemoOptions) {
     granted: new Set<string>(),
     refunded: new Set<string>(),
     jobs: 0,
+    failNext: false,
   };
   const addJob: Enqueue = enqueue ?? (async () => void db.jobs++);
 
   const apply = async (event: WebhookEvent) => {
     const session = (event.data as { object: { id: string } }).object.id;
+    if (db.failNext) {
+      db.failNext = false;
+      throw new Error('payment write failed'); // injected by crash-lab's retry-after-failure
+    }
     if (event.type === 'checkout.session.completed') {
       if (mode === 'fixed' && db.refunded.has(session)) return; // refund arrived first
       db.credits += 100;
@@ -53,15 +58,16 @@ export function createDemoApp({ mode, secret, enqueue }: DemoOptions) {
     const header = req.headers.get('stripe-signature');
     if (mode === 'broken') {
       // Typical generated code: no null check, no timestamp tolerance, unguarded JSON.parse,
-      // and "check then insert" dedupe with an await in between.
+      // "check then insert" dedupe with an await in between, and the event saved as processed
+      // before the work is done.
       const t = (header as string).split(',')[0]?.slice(2);
       if (!verifySignature(raw, header, secret, { toleranceSeconds: 0 }) || !t)
         return new Response('bad signature', { status: 400 });
       const event = JSON.parse(raw) as WebhookEvent;
       if (db.processed.has(event.id)) return new Response('ok');
       await tick();
+      db.processed.add(event.id); // "save the event", then process it
       await apply(event);
-      db.processed.add(event.id);
       return new Response('ok');
     }
     if (!verifySignature(raw, header, secret))
@@ -74,8 +80,13 @@ export function createDemoApp({ mode, secret, enqueue }: DemoOptions) {
     }
     if (db.processed.has(event.id)) return new Response('duplicate');
     db.processed.add(event.id); // atomic claim before any await (like INSERT ... ON CONFLICT)
-    await tick();
-    await apply(event);
+    try {
+      await tick();
+      await apply(event);
+    } catch {
+      db.processed.delete(event.id); // release the claim so the provider's retry is processed
+      return new Response('retry later', { status: 500 });
+    }
     return new Response('ok');
   };
 
@@ -84,7 +95,11 @@ export function createDemoApp({ mode, secret, enqueue }: DemoOptions) {
       db.credits = 0;
       db.jobs = 0;
       db.ledger.length = 0;
+      db.failNext = false;
       for (const s of [db.processed, db.granted, db.refunded]) s.clear();
+    },
+    failNextEffect() {
+      db.failNext = true;
     },
     observe: () => ({
       credits: db.credits,

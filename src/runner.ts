@@ -71,6 +71,28 @@ function diff(expected: State, actual: State): string {
     .join('; ');
 }
 
+function retryStatusCheck(codes: number[]): CheckResult {
+  const name = 'http status';
+  const [first, retry] = codes as [number, number];
+  if (first >= 200 && first < 300)
+    return {
+      name,
+      status: 'fail',
+      detail: `The failed delivery returned ${first}. A 2xx tells the provider the event was handled, so it never retries and the work is lost.`,
+    };
+  if (retry < 200 || retry >= 300)
+    return {
+      name,
+      status: 'fail',
+      detail: `The retry after the failure returned ${retry}, expected 2xx.`,
+    };
+  return {
+    name,
+    status: 'pass',
+    detail: `Failed delivery returned ${first} (the provider retries), the retry returned ${retry}.`,
+  };
+}
+
 function statusCheck(def: ScenarioDef, codes: number[], timeoutMs: number): CheckResult {
   const name = 'http status';
   const timeouts = codes.filter((c) => c === TIMED_OUT).length;
@@ -82,6 +104,7 @@ function statusCheck(def: ScenarioDef, codes: number[], timeoutMs: number): Chec
     };
   if (codes.includes(0))
     return { name, status: 'fail', detail: 'Could not reach the target URL (connection failed).' };
+  if (def.expectation === 'retry') return retryStatusCheck(codes);
   const crashed = codes.filter((c) => c >= 500);
   if (crashed.length)
     return {
@@ -134,6 +157,14 @@ async function runScenario(def: ScenarioDef, config: CrashLabConfig): Promise<Sc
       `Not applicable to the ${scheme} scheme.`,
     );
   }
+  if (def.id === 'retry-after-failure' && !adapter?.failNextEffect) {
+    return notTested(
+      def,
+      started,
+      'No `adapter.failNextEffect` configured.',
+      'Add `failNextEffect()` to your adapter: make the next business write throw once.',
+    );
+  }
   if (def.expectation === 'sequence' && !config.sequence) {
     return finish(
       def,
@@ -168,6 +199,11 @@ async function runScenario(def: ScenarioDef, config: CrashLabConfig): Promise<Sc
   if (def.id === 'out-of-order')
     for (const e of [...(config.sequence?.events as WebhookEvent[])].reverse())
       codes.push(await deliver(config, JSON.stringify(e), 'valid', e.id));
+  if (def.id === 'retry-after-failure') {
+    await adapter?.failNextEffect?.();
+    codes.push(await deliver(config, body, 'valid'));
+    codes.push(await deliver(config, body, 'valid'));
+  }
 
   const after = await observe(config);
   const name = 'business state';
@@ -182,7 +218,7 @@ async function runScenario(def: ScenarioDef, config: CrashLabConfig): Promise<Sc
     state = d
       ? { name, status: 'fail', detail: `Final state is wrong after out-of-order delivery: ${d}.` }
       : { name, status: 'pass', detail: 'Final state matches the expected outcome.' };
-  } else if (def.expectation === 'accept-once') {
+  } else if (def.expectation === 'accept-once' || def.expectation === 'retry') {
     if (!once) {
       state = { name, status: 'not-tested', detail: 'No `expect.once` configured.' };
     } else {

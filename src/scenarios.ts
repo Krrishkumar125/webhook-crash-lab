@@ -1,6 +1,6 @@
 import type { ScenarioId } from './types.js';
 
-export type Expectation = 'accept-once' | 'reject' | 'sequence';
+export type Expectation = 'accept-once' | 'reject' | 'sequence' | 'retry';
 
 export interface ScenarioDef {
   id: ScenarioId;
@@ -75,5 +75,13 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     what: 'Sends a correctly signed but truncated JSON body.',
     why: 'An unhandled JSON.parse throws a 500 instead of a clean 400.',
     fix: 'Wrap parsing in try/catch and return 400 for bodies that are not valid JSON.',
+  },
+  {
+    id: 'retry-after-failure',
+    title: 'Retry after a failed write',
+    expectation: 'retry',
+    what: 'Makes the business write fail once (adapter.failNextEffect), sends the event, then sends it again as the provider retry.',
+    why: 'If the event id is saved as processed before the payment or credit write commits, the retry is skipped as a duplicate and the money is silently lost.',
+    fix: 'Save the event id in the same transaction as the business write, or delete the claim when the work fails, and return 5xx so the provider retries.',
   },
 ];

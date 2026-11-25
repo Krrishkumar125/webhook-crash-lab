@@ -19,6 +19,12 @@ export interface StateAdapter<S extends State = State> {
   observe(): S | Promise<S>;
   /** Optional: wait for async work (queues, outbox) to finish before observing. */
   settle?(): void | Promise<void>;
+  /**
+   * Optional fault injection for the `retry-after-failure` scenario: make the NEXT business write
+   * (credit grant, payment row) throw once, as if the database call failed halfway through.
+   * crash-lab calls it, sends the event, then sends it again like a provider retry.
+   */
+  failNextEffect?(): void | Promise<void>;
 }
 
 export type ScenarioId =
@@ -29,7 +35,8 @@ export type ScenarioId =
   | 'invalid-signature'
   | 'missing-signature'
   | 'stale-timestamp'
-  | 'malformed-json';
+  | 'malformed-json'
+  | 'retry-after-failure';
 
 export type Provider = 'stripe' | 'github' | 'razorpay' | 'standard';
 

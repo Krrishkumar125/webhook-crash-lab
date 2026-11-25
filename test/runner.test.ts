@@ -44,9 +44,18 @@ describe('runCrashLab against the bundled broken demo', () => {
     expect(byId(result, 'out-of-order').status).toBe('fail');
   });
 
+  it('catches the retry that is skipped because the event was saved before the work', () => {
+    const s = byId(result, 'retry-after-failure');
+    expect(s.status).toBe('fail');
+    expect(s.responses).toEqual([500, 200]);
+    expect(s.checks.find((c) => c.name === 'business state')?.detail).toMatch(
+      /credits: expected 100, got 0/,
+    );
+  });
+
   it('summarises and assertNoCrashes throws a readable error', () => {
     expect(result.ok).toBe(false);
-    expect(result.summary.fail).toBe(5);
+    expect(result.summary.fail).toBe(6);
     expect(() => assertNoCrashes(result)).toThrow(/duplicate-concurrent/);
   });
 });
