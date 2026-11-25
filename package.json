@@ -1,7 +1,7 @@
 {
   "name": "webhook-crash-lab",
-  "version": "0.3.4",
-  "description": "Crash-test Stripe-style webhook handlers with duplicate, concurrent, out-of-order and forged deliveries.",
+  "version": "0.4.0",
+  "description": "Crash-test webhook handlers (Stripe, GitHub, Razorpay, Standard Webhooks): duplicate, out-of-order, forged deliveries.",
   "license": "MIT",
   "author": "Krrish Kumar (https://github.com/Krrishkumar125)",
   "repository": {
@@ -22,7 +22,9 @@
     "duplicate-events",
     "race-condition",
     "payments",
-    "bullmq"
+    "bullmq",
+    "razorpay",
+    "standard-webhooks"
   ],
   "type": "module",
   "sideEffects": false,

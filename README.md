@@ -2,7 +2,7 @@
 
 **HTTP 200 does not mean your webhook is correct.**
 
-`webhook-crash-lab` crash-tests a Stripe-style webhook handler on your machine or in CI. It replays the deliveries that break real apps (duplicates, parallel retries, out-of-order events, forged, unsigned, stale and malformed requests) and then checks your **business state**: credits granted once, one ledger row, one BullMQ job.
+`webhook-crash-lab` crash-tests a webhook handler (Stripe, GitHub, Razorpay or Standard Webhooks signatures) on your machine or in CI. It replays the deliveries that break real apps (duplicates, parallel retries, out-of-order events, a retry after a failed write, forged, unsigned, stale and malformed requests) and then checks your **business state**: credits granted once, one ledger row, one BullMQ job.
 
 [![CI](https://github.com/Krrishkumar125/webhook-crash-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/Krrishkumar125/webhook-crash-lab/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/webhook-crash-lab)](https://www.npmjs.com/package/webhook-crash-lab)
@@ -15,7 +15,7 @@ MIT · TypeScript · zero runtime dependencies · Node 20+
 npx webhook-crash-lab demo --html report.html
 ```
 
-![Terminal run of npx webhook-crash-lab demo: the broken handler fails 5 of 8 checks, then the fixed handler passes all 8](docs/demo.gif)
+![Terminal run of npx webhook-crash-lab demo, recorded with 0.3: the broken handler fails 5 of 8 checks, then the fixed handler passes all 8. 0.4 adds a ninth check, shown in the text below](docs/demo.gif)
 
 This runs a bundled "AI credits" app twice: first the kind of handler AI tools often generate, then the fixed version.
 
@@ -31,10 +31,11 @@ This runs a bundled "AI credits" app twice: first the kind of handler AI tools o
   FAIL  missing-signature      No signature header        -> crashed with 500
   FAIL  stale-timestamp        Old, replayed delivery     -> accepted, granted credits
   FAIL  malformed-json         Broken JSON body           -> crashed with 500
-  3 passed, 5 failed, 0 not tested
+  FAIL  retry-after-failure    Retry after a failed write -> payment lost
+  3 passed, 6 failed, 0 not tested
 
 === FIXED handler ===
-  8 passed, 0 failed, 0 not tested
+  9 passed, 0 failed, 0 not tested
 ```
 
 Open `report.html` for a plain-English version you can share with a non-technical cofounder. The demo source is in [`src/demo/app.ts`](src/demo/app.ts).
@@ -77,31 +78,55 @@ it('stripe webhook survives duplicate, concurrent and out-of-order delivery', as
 
 ## Scenarios
 
-| id                     | sends                           | passes when                                |
-| ---------------------- | ------------------------------- | ------------------------------------------ |
-| `single-valid`         | the event once                  | 2xx, state equals `expect.once`            |
-| `duplicate-sequential` | the same event 3× in a row      | 2xx each, state still equals `expect.once` |
-| `duplicate-concurrent` | 5 identical copies in parallel  | 2xx each, state still equals `expect.once` |
-| `out-of-order`         | your `sequence` reversed        | no 5xx, state equals `sequence.expected`   |
-| `invalid-signature`    | signed with the wrong secret    | 4xx, state unchanged                       |
-| `missing-signature`    | no signature header             | 4xx (not 500), state unchanged             |
-| `stale-timestamp`      | valid signature, 10 minutes old | 4xx, state unchanged                       |
-| `malformed-json`       | valid signature, truncated body | 4xx (not 500), state unchanged             |
+| id                     | sends                                                                                 | passes when                                                                           |
+| ---------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `single-valid`         | the event once                                                                        | 2xx, state equals `expect.once`                                                       |
+| `duplicate-sequential` | the same event 3× in a row                                                            | 2xx each, state still equals `expect.once`                                            |
+| `duplicate-concurrent` | 5 identical copies in parallel                                                        | 2xx each, state still equals `expect.once`                                            |
+| `out-of-order`         | your `sequence` reversed                                                              | no 5xx, state equals `sequence.expected`                                              |
+| `invalid-signature`    | signed with the wrong secret                                                          | 4xx, state unchanged                                                                  |
+| `missing-signature`    | no signature header                                                                   | 4xx (not 500), state unchanged                                                        |
+| `stale-timestamp`      | valid signature, 10 minutes old                                                       | 4xx, state unchanged                                                                  |
+| `malformed-json`       | valid signature, truncated body                                                       | 4xx (not 500), state unchanged                                                        |
+| `retry-after-failure`  | the event while your adapter makes the business write fail, then the same event again | non-2xx first (so the provider retries), 2xx on the retry, state equals `expect.once` |
+
+### Retry after a failed write
+
+The most expensive webhook bug returns no error at all. The handler saves the event id as processed, then the payment or credit write fails. The provider retries, the handler sees a known id, answers `200 duplicate`, and the payment is gone. Event-id dedupe alone causes it.
+
+To test it, give your adapter a `failNextEffect()` that makes the next business write throw once:
+
+```ts
+adapter: {
+  reset: () => db.truncateAll(),
+  observe: async () => ({ credits: await db.credits('u1') }),
+  failNextEffect: () => db.failNextWrite(), // your test double throws on the next insert
+},
+```
+
+crash-lab sends the event (the write fails), then sends it again like the provider would. It passes when the failed delivery got a non-2xx answer and the retry applied the effect exactly once. The usual fix is to write the event id in the same transaction as the business change, or to delete the claim when the work fails. Without `failNextEffect` the scenario is reported as not tested.
 
 **Nothing is silently passed.** If you don't give an adapter, `expect.once` or `sequence`, those checks are reported as **not tested**.
 
 **Every delivery has a deadline.** A handler that doesn't respond within `timeoutMs` (default 10000) fails the scenario instead of hanging the run, and the request's `signal` is aborted so your handler can stop work.
 
-Signatures use Stripe's `t=...,v1=...` HMAC-SHA256 scheme and are verified against the official `stripe` library in this repo's tests.
+Stripe signatures use the `t=...,v1=...` HMAC-SHA256 scheme and are verified against the official `stripe` library in this repo's tests. Other schemes: see [Providers](#providers).
 
 ## Examples
 
 - [Express](examples/express/app.ts): raw body, signature check, atomic claim. Tested in CI against a real server.
 - [Next.js App Router + Prisma](examples/nextjs-prisma/README.md): pass the route's `POST` straight in, unique `eventId` as the claim.
 
-## GitHub webhooks
+## Providers
 
-Set `provider: 'github'` to sign with `X-Hub-Signature-256: sha256=...`. GitHub signatures have no timestamp, so `stale-timestamp` is reported as not tested.
+| `provider`         | headers sent                                                                                                          | stale-timestamp |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------- | --------------- |
+| `stripe` (default) | `Stripe-Signature: t=...,v1=...`                                                                                      | tested          |
+| `github`           | `X-Hub-Signature-256: sha256=...`, `X-GitHub-Delivery`                                                                | not tested      |
+| `razorpay`         | `X-Razorpay-Signature` (hex HMAC of the raw body), `X-Razorpay-Event-Id`                                              | not tested      |
+| `standard`         | [Standard Webhooks](https://www.standardwebhooks.com): `webhook-id`, `webhook-timestamp`, `webhook-signature: v1,...` | tested          |
+
+Duplicates reuse the same event id header, so a handler that dedupes on `X-Razorpay-Event-Id` (as Razorpay's docs recommend) or `webhook-id` is tested the way it runs in production. For `standard`, pass the `whsec_...` secret exactly as your provider shows it. `verifyRazorpay` and `verifyStandard` are exported if you want a reference implementation; the Standard Webhooks signer is checked against the reference libraries' known-answer vector.
 
 ## BullMQ: one webhook, one job
 
@@ -129,6 +154,37 @@ same object `runCrashLab` takes. **TypeScript configs** load through [jiti](http
 installed (`npm i -D jiti`; handles extensionless imports of your app), otherwise through Node's built-in type
 stripping (Node 22.18+). `loadConfig(path)` is exported for tools that want the same behaviour. Works with `npx`,
 `pnpm dlx` and `bunx`. Exit codes: `0` no failures, `1` failures found, `2` config or usage error.
+
+## GitHub Action
+
+```yaml
+- uses: Krrishkumar125/webhook-crash-lab@v0.4.0
+  with:
+    config: crash-lab.config.mjs # default: crash-lab.config.* in working-directory
+    html-report: crash-report.html
+- uses: actions/upload-artifact@v4
+  if: always()
+  with:
+    name: crash-report
+    path: crash-report.html
+```
+
+The action runs `webhook-crash-lab run` (the copy in your `node_modules` if installed, otherwise the npm release, or pin one with `version:`), prints the results in the job summary, and fails the job when any scenario fails. Start your app first if the config targets a URL. Inputs: `config`, `working-directory`, `html-report`, `version`. Output: `exit-code`.
+
+## How it compares
+
+Checked on 26 Nov 2026.
+
+|                                                  | **webhook-crash-lab**                       | [webhook-chaos](https://www.npmjs.com/package/webhook-chaos) 0.3.0 | Stripe CLI (`stripe trigger`)                                                |
+| ------------------------------------------------ | ------------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| Runs inside Vitest/Jest, no server needed        | Yes (`(req) => Response` targets)           | No, HTTP target                                                    | No                                                                           |
+| Checks your business state (credits, rows, jobs) | Yes, through an adapter                     | No ("assertions are yours")                                        | No                                                                           |
+| Duplicates, parallel copies, out of order        | Yes                                         | Yes, with timing control                                           | Resend one event (`stripe events resend`)                                    |
+| Forged, unsigned and stale signatures            | Yes                                         | No                                                                 | No                                                                           |
+| Retry after a failed write                       | Yes                                         | No                                                                 | No                                                                           |
+| Replays real recorded events                     | No, you write the event                     | Yes, Shopify and Stripe recorder                                   | Real test-mode events                                                        |
+| Signatures                                       | Stripe, GitHub, Razorpay, Standard Webhooks | Shopify, Stripe                                                    | Stripe                                                                       |
+| GitHub Action                                    | Yes                                         | No                                                                 | No ([requested since 2021](https://github.com/stripe/stripe-cli/issues/699)) |
 
 ## What it does not do
 

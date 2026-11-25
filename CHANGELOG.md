@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0 (2026-11-26)
+
+- New scenario `retry-after-failure`: your adapter's optional `failNextEffect()` makes the next business write throw once, crash-lab delivers the event, then delivers it again as the provider retry. It fails handlers that save the event id before the write (the retry is skipped as a duplicate and the payment is lost) and handlers that answer 2xx after a failed write (the provider never retries). Not tested when the adapter has no `failNextEffect`.
+- New providers: `razorpay` (`X-Razorpay-Signature` hex HMAC of the raw body, plus `X-Razorpay-Event-Id`) and `standard` ([Standard Webhooks](https://www.standardwebhooks.com): `webhook-id`, `webhook-timestamp`, `webhook-signature`). `stale-timestamp` is tested for `standard` and reported as not tested for `razorpay`. New exports: `signRazorpay`, `verifyRazorpay`, `signStandard`, `verifyStandard`, `PROVIDERS`.
+- `github` deliveries now also carry an `X-GitHub-Delivery` header with the event id.
+- GitHub Action (`uses: Krrishkumar125/webhook-crash-lab@v0.4.0`): runs `webhook-crash-lab run`, writes the HTML report, adds the results to the job summary and fails the job on any failed scenario.
+- Demo: the broken handler now also saves the event before doing the work, so it fails 6 of 9 checks; the fixed handler releases its claim when the work fails and passes all 9.
+- An unknown `provider` now throws before any delivery.
+- README: provider table and a comparison with webhook-chaos and the Stripe CLI.
+
 ## 0.3.4 (2026-11-15)
 
 - `demo`: the broken run header now reads `=== BROKEN handler ===`, so the terminal output matches the README.

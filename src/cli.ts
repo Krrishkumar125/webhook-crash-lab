@@ -14,7 +14,7 @@ export interface Io {
   error(s: string): void;
 }
 
-const HELP = `webhook-crash-lab — crash-test your webhook handler
+const HELP = `webhook-crash-lab: crash-test your webhook handler
 
 Usage:
   webhook-crash-lab demo [--mode broken|fixed] [--html file] [--json file]
