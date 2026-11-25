@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { SCENARIOS, type ScenarioDef } from './scenarios.js';
-import { nowSeconds, signGithub, signPayload } from './signing.js';
+import { providerOf } from './providers.js';
+import { nowSeconds } from './signing.js';
 import type {
   CheckResult,
   CrashLabConfig,
@@ -13,18 +14,21 @@ import type {
 
 type SignMode = 'valid' | 'invalid' | 'missing' | 'stale';
 
-async function deliver(config: CrashLabConfig, body: string, mode: SignMode): Promise<number> {
+async function deliver(
+  config: CrashLabConfig,
+  body: string,
+  mode: SignMode,
+  eventId: string = config.event.id,
+): Promise<number> {
+  const provider = providerOf(config.provider);
+  const header = config.signatureHeader ?? provider.signatureHeader;
+  const age = mode === 'stale' ? (config.staleSeconds ?? 600) : 0;
+  const secret = mode === 'invalid' ? provider.wrongSecret(config.secret) : config.secret;
+  const signed = provider.headers({ body, secret, eventId, timestamp: nowSeconds() - age });
   const headers = new Headers({ 'content-type': 'application/json' });
-  const github = config.provider === 'github';
-  const header = config.signatureHeader ?? (github ? 'x-hub-signature-256' : 'stripe-signature');
-  const sign = (secret: string) => (github ? signGithub(body, secret) : signPayload(body, secret));
-  if (mode === 'valid') headers.set(header, sign(config.secret));
-  if (mode === 'invalid') headers.set(header, sign(`${config.secret}_wrong`));
-  if (mode === 'stale')
-    headers.set(
-      header,
-      signPayload(body, config.secret, nowSeconds() - (config.staleSeconds ?? 600)),
-    );
+  for (const [k, v] of Object.entries(signed))
+    if (k !== provider.signatureHeader) headers.set(k, v);
+  if (mode !== 'missing') headers.set(header, signed[provider.signatureHeader] as string);
   const url = typeof config.target === 'string' ? config.target : 'http://crash-lab.local/webhook';
   const controller = new AbortController();
   const req = new Request(url, { method: 'POST', headers, body, signal: controller.signal });
@@ -121,23 +125,13 @@ async function runScenario(def: ScenarioDef, config: CrashLabConfig): Promise<Sc
   let codes: number[] = [];
   let state: CheckResult;
 
-  if (def.id === 'stale-timestamp' && config.provider === 'github') {
-    return finish(
+  if (def.id === 'stale-timestamp' && !providerOf(config.provider).timestamped) {
+    const scheme = config.provider ?? 'stripe';
+    return notTested(
       def,
       started,
-      [],
-      [
-        {
-          name: 'http status',
-          status: 'not-tested',
-          detail: 'GitHub signatures carry no timestamp.',
-        },
-        {
-          name: 'business state',
-          status: 'not-tested',
-          detail: 'Not applicable to the github scheme.',
-        },
-      ],
+      `${scheme} signatures carry no timestamp.`,
+      `Not applicable to the ${scheme} scheme.`,
     );
   }
   if (def.expectation === 'sequence' && !config.sequence) {
@@ -173,7 +167,7 @@ async function runScenario(def: ScenarioDef, config: CrashLabConfig): Promise<Sc
   if (def.id === 'malformed-json') codes = [await deliver(config, body.slice(0, -3), 'valid')];
   if (def.id === 'out-of-order')
     for (const e of [...(config.sequence?.events as WebhookEvent[])].reverse())
-      codes.push(await deliver(config, JSON.stringify(e), 'valid'));
+      codes.push(await deliver(config, JSON.stringify(e), 'valid', e.id));
 
   const after = await observe(config);
   const name = 'business state';
@@ -215,6 +209,18 @@ async function runScenario(def: ScenarioDef, config: CrashLabConfig): Promise<Sc
   return finish(def, started, codes, [statusCheck(def, codes, timeoutOf(config)), state]);
 }
 
+function notTested(def: ScenarioDef, started: number, http: string, state: string): ScenarioResult {
+  return finish(
+    def,
+    started,
+    [],
+    [
+      { name: 'http status', status: 'not-tested', detail: http },
+      { name: 'business state', status: 'not-tested', detail: state },
+    ],
+  );
+}
+
 function finish(
   def: ScenarioDef,
   started: number,
@@ -242,6 +248,7 @@ function finish(
 
 /** Run every (or the selected) crash scenario against your handler, one at a time. */
 export async function runCrashLab(config: CrashLabConfig): Promise<CrashLabResult> {
+  providerOf(config.provider); // fail fast on an unknown provider
   if (
     config.timeoutMs !== undefined &&
     !(Number.isFinite(config.timeoutMs) && config.timeoutMs > 0)

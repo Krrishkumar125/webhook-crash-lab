@@ -6,10 +6,16 @@ export { SCENARIOS } from './scenarios.js';
 export {
   signGithub,
   signPayload,
+  signRazorpay,
+  signStandard,
   verifyGithub,
+  verifyRazorpay,
   verifySignature,
+  verifyStandard,
+  type StandardHeaders,
   type VerifyOptions,
 } from './signing.js';
+export { PROVIDERS, type ProviderDef } from './providers.js';
 export { toText, toJson } from './report/text.js';
 export { toHtml } from './report/html.js';
 export {

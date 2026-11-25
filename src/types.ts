@@ -31,11 +31,15 @@ export type ScenarioId =
   | 'stale-timestamp'
   | 'malformed-json';
 
-export type Provider = 'stripe' | 'github';
+export type Provider = 'stripe' | 'github' | 'razorpay' | 'standard';
 
 export interface CrashLabConfig {
   name?: string;
-  /** Signing scheme. `stripe` (default): `Stripe-Signature: t=..,v1=..`. `github`: `X-Hub-Signature-256`. */
+  /**
+   * Signing scheme. `stripe` (default): `Stripe-Signature: t=..,v1=..`. `github`: `X-Hub-Signature-256`.
+   * `razorpay`: `X-Razorpay-Signature` plus `X-Razorpay-Event-Id`. `standard`: Standard Webhooks
+   * (`webhook-id`, `webhook-timestamp`, `webhook-signature`), see standardwebhooks.com.
+   */
   provider?: Provider;
   target: Target;
   /** Webhook signing secret your handler verifies with (e.g. a test `whsec_...`). */
@@ -54,7 +58,7 @@ export interface CrashLabConfig {
   concurrency?: number;
   /** Sequential copies for duplicate-sequential. Default 3. */
   duplicates?: number;
-  /** Default `stripe-signature` (stripe) or `x-hub-signature-256` (github). */
+  /** Override the signature header name. Defaults: `stripe-signature`, `x-hub-signature-256`, `x-razorpay-signature`, `webhook-signature`. */
   signatureHeader?: string;
   /** Age of the stale delivery in seconds. Default 600 (Stripe tolerance is 300). */
   staleSeconds?: number;

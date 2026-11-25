@@ -59,3 +59,73 @@ export function verifyGithub(
   const expected = Buffer.from(signGithub(payload, secret).slice(7), 'hex');
   return got.length === expected.length && timingSafeEqual(got, expected);
 }
+
+const hexEqual = (a: string, b: string): boolean => {
+  const x = Buffer.from(a, 'hex');
+  const y = Buffer.from(b, 'hex');
+  return x.length > 0 && x.length === y.length && timingSafeEqual(x, y);
+};
+
+/** Razorpay `X-Razorpay-Signature`: hex HMAC-SHA256 of the raw body, keyed with the webhook secret. */
+export function signRazorpay(payload: string, secret: string): string {
+  return createHmac('sha256', secret).update(payload).digest('hex');
+}
+
+/** Constant-time check of an `X-Razorpay-Signature` header. Razorpay signatures carry no timestamp. */
+export function verifyRazorpay(
+  payload: string,
+  header: string | null | undefined,
+  secret: string,
+): boolean {
+  return !!header && hexEqual(header, signRazorpay(payload, secret));
+}
+
+/** Standard Webhooks key: the base64 part of a `whsec_...` secret, decoded. */
+const standardKey = (secret: string): Buffer =>
+  Buffer.from(secret.startsWith('whsec_') ? secret.slice(6) : secret, 'base64');
+
+/**
+ * Standard Webhooks (https://www.standardwebhooks.com) symmetric signature for the
+ * `webhook-signature` header: `v1,<base64 HMAC-SHA256 of "msgId.timestamp.payload">`.
+ */
+export function signStandard(
+  msgId: string,
+  timestamp: number,
+  payload: string,
+  secret: string,
+): string {
+  const sig = createHmac('sha256', standardKey(secret))
+    .update(`${msgId}.${timestamp}.${payload}`)
+    .digest('base64');
+  return `v1,${sig}`;
+}
+
+export interface StandardHeaders {
+  id: string | null | undefined;
+  timestamp: string | null | undefined;
+  signature: string | null | undefined;
+}
+
+/**
+ * Verify Standard Webhooks headers (`webhook-id`, `webhook-timestamp`, `webhook-signature`) in
+ * constant time. The signature header may hold several space-separated `v1,...` entries during
+ * secret rotation; any match passes. Timestamps outside the tolerance (default 300s) fail.
+ */
+export function verifyStandard(
+  payload: string,
+  headers: StandardHeaders,
+  secret: string,
+  { toleranceSeconds = 300, now = nowSeconds() }: VerifyOptions = {},
+): boolean {
+  const { id, timestamp, signature } = headers;
+  if (!id || !timestamp || !signature || !/^\d+$/.test(timestamp)) return false;
+  const t = Number(timestamp);
+  if (toleranceSeconds > 0 && Math.abs(now - t) > toleranceSeconds) return false;
+  const expected = Buffer.from(signStandard(id, t, payload, secret).slice(3), 'base64');
+  return signature.split(' ').some((entry) => {
+    const [version, sig] = entry.split(',', 2);
+    if (version !== 'v1' || !sig) return false;
+    const got = Buffer.from(sig, 'base64');
+    return got.length === expected.length && timingSafeEqual(got, expected);
+  });
+}
