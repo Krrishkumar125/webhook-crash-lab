@@ -44,6 +44,40 @@ jobs:
           npx webhook-crash-lab demo --html report.html
           test -s report.html
           if npx webhook-crash-lab demo --mode broken; then echo "broken demo should exit 1"; exit 1; fi
+  action:
+    name: GitHub Action (action.yml)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci && npm run build
+      - name: Install the packed package into a fresh project
+        run: |
+          T=$(npm pack -s --pack-destination "$RUNNER_TEMP")
+          mkdir "$RUNNER_TEMP/app" && cd "$RUNNER_TEMP/app" && npm init -y >/dev/null
+          npm i "$RUNNER_TEMP/$T"
+          cp "$GITHUB_WORKSPACE"/test/fixtures/action-*.config.mjs .
+      - name: Fixed handler passes
+        uses: ./
+        with:
+          working-directory: ${{ runner.temp }}/app
+          config: action-fixed.config.mjs
+      - run: test -s "$RUNNER_TEMP/app/webhook-crash-lab-report.html"
+      - name: Broken handler fails
+        id: broken
+        continue-on-error: true
+        uses: ./
+        with:
+          working-directory: ${{ runner.temp }}/app
+          config: action-broken.config.mjs
+      - name: The broken run must have failed with exit code 1
+        env:
+          OUTCOME: ${{ steps.broken.outcome }}
+          CODE: ${{ steps.broken.outputs.exit-code }}
+        run: test "$OUTCOME" = failure && test "$CODE" = 1
   windows:
     runs-on: windows-latest
     env:

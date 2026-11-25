@@ -1,0 +1,66 @@
+name: webhook-crash-lab
+description: Crash-test a webhook handler in CI with duplicate, parallel, out-of-order, forged, stale and failed-then-retried deliveries.
+author: Krrish Kumar
+branding:
+  icon: zap
+  color: red
+
+inputs:
+  config:
+    description: Path to the crash-lab config file. Default is crash-lab.config.* in working-directory.
+    required: false
+    default: ''
+  working-directory:
+    description: Directory to run in (where your package.json and config live).
+    required: false
+    default: '.'
+  html-report:
+    description: Where to write the plain-English HTML report. Upload it with actions/upload-artifact.
+    required: false
+    default: webhook-crash-lab-report.html
+  version:
+    description: webhook-crash-lab version to run. Default is the one installed in node_modules, else the latest from npm.
+    required: false
+    default: ''
+
+outputs:
+  exit-code:
+    description: 0 when every scenario passed, 1 when something failed, 2 for a usage or config error.
+    value: ${{ steps.run.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    - id: run
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        CRASH_LAB_CONFIG: ${{ inputs.config }}
+        CRASH_LAB_HTML: ${{ inputs.html-report }}
+        CRASH_LAB_VERSION: ${{ inputs.version }}
+      run: |
+        if [ -n "$CRASH_LAB_VERSION" ]; then
+          bin=(npx --yes "webhook-crash-lab@$CRASH_LAB_VERSION")
+        elif [ -x node_modules/.bin/webhook-crash-lab ]; then
+          bin=(node_modules/.bin/webhook-crash-lab)
+        else
+          bin=(npx --yes webhook-crash-lab@latest)
+        fi
+        args=(run)
+        if [ -n "$CRASH_LAB_CONFIG" ]; then args+=("$CRASH_LAB_CONFIG"); fi
+        args+=(--html "$CRASH_LAB_HTML")
+        out="$RUNNER_TEMP/webhook-crash-lab.txt"
+        set +e
+        "${bin[@]}" "${args[@]}" > "$out" 2>&1
+        code=$?
+        set -e
+        cat "$out"
+        {
+          echo '### webhook-crash-lab'
+          echo
+          echo '```'
+          cat "$out"
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        exit "$code"
